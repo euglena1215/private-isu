@@ -88,7 +88,7 @@ module Isuconp
 
       def get_session_user
         if session[:user]
-          db.prepare('SELECT * FROM `users` WHERE `id` = ?').execute(
+          db.prepare('SELECT `id`, `authority`, `account_name` FROM `users` WHERE `id` = ?').execute(
             session[:user][:id]
           ).first
         else
