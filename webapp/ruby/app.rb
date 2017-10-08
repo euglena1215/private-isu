@@ -109,19 +109,19 @@ module Isuconp
 
           query = 'SELECT * FROM `comments` WHERE `post_id` = ? ORDER BY `created_at` DESC'
           unless all_comments
-            query += ' LIMIT 3'
+            query << ' LIMIT 3'
           end
           comments = db.prepare(query).execute(
             post[:id]
           ).to_a
           comments.each do |comment|
-            comment[:user] = db.prepare('SELECT * FROM `users` WHERE `id` = ?').execute(
+            comment[:user] = db.prepare('SELECT `account_name` FROM `users` WHERE `id` = ?').execute(
               comment[:user_id]
             ).first
           end
           post[:comments] = comments.reverse
 
-          post[:user] = db.prepare('SELECT * FROM `users` WHERE `id` = ?').execute(
+          post[:user] = db.prepare('SELECT `account_name`, `del_flg` FROM `users` WHERE `id` = ?').execute(
             post[:user_id]
           ).first
 
@@ -292,7 +292,7 @@ LIMIT 20
     end
 
     get '/posts/:id' do
-      results = db.prepare('SELECT * FROM `posts` WHERE `id` = ?').execute(
+      results = db.prepare('SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `id` = ?').execute(
         params[:id]
       )
       posts = make_posts(results, all_comments: true)
@@ -358,7 +358,7 @@ LIMIT 20
         return ""
       end
 
-      post = db.prepare('SELECT * FROM `posts` WHERE `id` = ?').execute(params[:id].to_i).first
+      post = db.prepare('SELECT `mime`, `imgdata` FROM `posts` WHERE `id` = ?').execute(params[:id].to_i).first
 
       if (params[:ext] == "jpg" && post[:mime] == "image/jpeg") ||
           (params[:ext] == "png" && post[:mime] == "image/png") ||
