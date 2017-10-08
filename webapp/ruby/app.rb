@@ -75,8 +75,7 @@ module Isuconp
       end
 
       def digest(src)
-        # opensslのバージョンによっては (stdin)= というのがつくので取る
-        `printf "%s" #{Shellwords.shellescape(src)} | openssl dgst -sha512 | sed 's/^.*= //'`.strip
+        Digest::SHA512.hexdigest(src)
       end
 
       def calculate_salt(account_name)
@@ -87,7 +86,7 @@ module Isuconp
         digest "#{password}:#{calculate_salt(account_name)}"
       end
 
-      def get_session_user()
+      def get_session_user
         if session[:user]
           db.prepare('SELECT * FROM `users` WHERE `id` = ?').execute(
             session[:user][:id]
@@ -97,10 +96,14 @@ module Isuconp
         end
       end
 
+      def get_session_user?
+        !!session[:user]
+      end
+
       def make_posts(results, all_comments: false)
         posts = []
         results.to_a.each do |post|
-          post[:comment_count] = db.prepare('SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = ?').execute(
+          post[:comment_count] = db.prepare('SELECT COUNT(id) AS `count` FROM `comments` WHERE `post_id` = ?').execute(
             post[:id]
           ).first[:count]
 
@@ -149,14 +152,14 @@ module Isuconp
     end
 
     get '/login' do
-      if get_session_user()
+      if get_session_user?
         redirect '/', 302
       end
       erb :login, layout: :layout, locals: { me: nil }
     end
 
     post '/login' do
-      if get_session_user()
+      if get_session_user?
         redirect '/', 302
       end
 
@@ -174,14 +177,14 @@ module Isuconp
     end
 
     get '/register' do
-      if get_session_user()
+      if get_session_user?
         redirect '/', 302
       end
       erb :register, layout: :layout, locals: { me: nil }
     end
 
     post '/register' do
-      if get_session_user()
+      if get_session_user?
         redirect '/', 302
       end
 
@@ -223,7 +226,20 @@ module Isuconp
     get '/' do
       me = get_session_user()
 
-      results = db.query('SELECT `id`, `user_id`, `body`, `created_at`, `mime` FROM `posts` ORDER BY `created_at` DESC')
+      query = <<-SQL
+SELECT 
+  `posts`.`id`,
+  `user_id`,
+  `body`,
+  `posts`.`created_at`,
+  `mime`
+FROM `posts`
+JOIN `users` ON `posts`.`user_id` = `users`.`id` AND `users`.`del_flg` = 0
+ORDER BY `posts`.`created_at` DESC
+LIMIT 20
+      SQL
+      results = db.query(query)
+
       posts = make_posts(results)
 
       erb :index, layout: :layout, locals: { posts: posts, me: me }
