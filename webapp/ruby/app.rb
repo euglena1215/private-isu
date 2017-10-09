@@ -59,7 +59,7 @@ module Isuconp
       end
 
       def try_login(account_name, password)
-        user = db.prepare('SELECT * FROM users WHERE account_name = ? AND del_flg = 0').execute(account_name).first
+        user = db.prepare('SELECT `id`, `account_name`, `passhash` FROM users WHERE account_name = ? AND del_flg = 0').execute(account_name).first
 
         if user && calculate_passhash(user[:account_name], password) == user[:passhash]
           return user
@@ -107,11 +107,11 @@ module Isuconp
       def make_posts(results, all_comments: false)
         posts = []
         results.to_a.each do |post|
-          post[:comment_count] = db.prepare('SELECT COUNT(id) AS `count` FROM `comments` WHERE `post_id` = ?').execute(
+          post[:comment_count] = db.prepare('SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = ?').execute(
             post[:id]
           ).first[:count]
 
-          query = 'SELECT * FROM `comments` WHERE `post_id` = ? ORDER BY `created_at` DESC'
+          query = 'SELECT `user_id`, `comment` FROM `comments` WHERE `post_id` = ? ORDER BY `created_at` ASC'
           unless all_comments
             query << ' LIMIT 3'
           end
@@ -136,7 +136,7 @@ module Isuconp
           comments.each do |comment|
             comment[:user] = { account_name: users[comment[:user_id].to_s] }
           end
-          post[:comments] = comments.reverse
+          post[:comments] = comments
 
           post[:user] = { account_name: users[post[:user_id].to_s] }
 
@@ -260,7 +260,7 @@ module Isuconp
     end
 
     get '/@:account_name' do
-      user = db.prepare('SELECT * FROM `users` WHERE `account_name` = ? AND `del_flg` = 0').execute(
+      user = db.prepare('SELECT `id`, `account_name` FROM `users` WHERE `account_name` = ? AND `del_flg` = 0').execute(
         params[:account_name]
       ).first
 
@@ -449,7 +449,7 @@ module Isuconp
         return 403
       end
 
-      users = db.query('SELECT * FROM `users` WHERE `authority` = 0 AND `del_flg` = 0 ORDER BY `created_at` DESC')
+      users = db.query('SELECT `account_name` FROM `users` WHERE `authority` = 0 AND `del_flg` = 0 ORDER BY `created_at` DESC')
 
       erb :banned, layout: :layout, locals: { users: users, me: me }
     end
