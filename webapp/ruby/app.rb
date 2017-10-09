@@ -118,16 +118,27 @@ module Isuconp
           comments = db.prepare(query).execute(
             post[:id]
           ).to_a
+
+          # postに関連するユーザーを全部取得してくる
+          user_ids = comments.map { |comment| comment[:user_id] }.push(post[:user_id])
+
+          users = db.prepare(
+            <<~"SQL"
+              SELECT
+                `id`, 
+                `account_name`
+              FROM `users`
+              WHERE
+                `id` IN (#{user_ids.join(',')})
+            SQL
+          ).execute().to_a.map { |hash| [hash[:id].to_s, hash[:account_name]] }.to_h
+
           comments.each do |comment|
-            comment[:user] = db.prepare('SELECT `account_name` FROM `users` WHERE `id` = ?').execute(
-              comment[:user_id]
-            ).first
+            comment[:user] = { account_name: users[comment[:user_id].to_s] }
           end
           post[:comments] = comments.reverse
 
-          post[:user] = db.prepare('SELECT `account_name`, `del_flg` FROM `users` WHERE `id` = ?').execute(
-            post[:user_id]
-          ).first
+          post[:user] = { account_name: users[post[:user_id].to_s] }
 
           posts.push(post)
         end
