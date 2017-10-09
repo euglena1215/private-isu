@@ -2,9 +2,13 @@ require 'sinatra/base'
 require 'mysql2'
 require 'rack-flash'
 require 'shellwords'
+require 'rack-lineprof'
+require 'pry'
 
 module Isuconp
   class App < Sinatra::Base
+    # use Rack::Lineprof, profile: 'app.rb'
+
     use Rack::Session::Memcache, autofix_keys: true, secret: ENV['ISUCONP_SESSION_SECRET'] || 'sendagaya'
     use Rack::Flash
     set :public_folder, File.expand_path('../../public', __FILE__)
@@ -226,17 +230,17 @@ module Isuconp
     get '/' do
       me = get_session_user()
 
-      query = <<-SQL
-SELECT 
-  `posts`.`id`,
-  `user_id`,
-  `body`,
-  `posts`.`created_at`,
-  `mime`
-FROM `posts`
-JOIN `users` ON `posts`.`user_id` = `users`.`id` AND `users`.`del_flg` = 0
-ORDER BY `posts`.`created_at` DESC
-LIMIT 20
+      query = <<~SQL
+        SELECT 
+          `posts`.`id`,
+          `user_id`,
+          `body`,
+          `posts`.`created_at`,
+          `mime`
+        FROM `posts`
+        JOIN `users` ON `posts`.`user_id` = `users`.`id` AND `users`.`del_flg` = 0
+        ORDER BY `posts`.`created_at` DESC
+        LIMIT 20
       SQL
       results = db.query(query)
 
@@ -283,7 +287,22 @@ LIMIT 20
 
     get '/posts' do
       max_created_at = params['max_created_at']
-      results = db.prepare('SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `created_at` <= ? ORDER BY `created_at` DESC').execute(
+
+      query = <<~SQL
+        SELECT 
+          `posts`.`id`,
+          `user_id`, 
+          `body`, 
+          `mime`, 
+          `posts`.`created_at` 
+        FROM `posts`
+        JOIN `users` ON `posts`.`user_id` = `users`.id AND `users`.`del_flg` = 0
+        WHERE `posts`.`created_at` <= ? 
+        ORDER BY `posts`.`created_at` DESC
+        LIMIT 20
+      SQL
+
+      results = db.prepare(query).execute(
         max_created_at.nil? ? nil : Time.iso8601(max_created_at).localtime
       )
       posts = make_posts(results)
@@ -292,12 +311,25 @@ LIMIT 20
     end
 
     get '/posts/:id' do
-      results = db.prepare('SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `id` = ?').execute(
+      query = <<~SQL
+        SELECT 
+          `posts`.`id`, 
+          `user_id`, 
+          `body`, 
+          `mime`, 
+          `posts`.`created_at` 
+        FROM `posts`
+        JOIN `users` ON `posts`.`user_id` = `users`.`id` AND `users`.`del_flg` = 0 
+        WHERE `posts`.`id` = ?
+      SQL
+
+      results = db.prepare(query).execute(
         params[:id]
       )
-      posts = make_posts(results, all_comments: true)
 
-      return 404 if posts.length == 0
+      return 404 if results.size == 0
+
+      posts = make_posts(results, all_comments: true)
 
       post = posts[0]
 
